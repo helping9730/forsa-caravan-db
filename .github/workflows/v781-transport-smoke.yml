@@ -4,35 +4,60 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+
+      - uses: actions/setup-python@v5
         with:
-          node-version: '22'
-      - name: Direct BI5 one-day smoke
+          python-version: '3.12'
+
+      - name: Install pinned Jetta transport
         shell: bash
         run: |
           set -euxo pipefail
-          URL="https://datafeed.dukascopy.com/datafeed/USA500IDXUSD/2019/00/03/BID_candles_min_1.bi5"
-          curl -fL --connect-timeout 10 --max-time 30 -A "V781-smoke/1.0" "$URL" -o /tmp/day.bi5
-          ls -l /tmp/day.bi5
-          sha256sum /tmp/day.bi5
+          python -m pip install --disable-pip-version-check \
+            "git+https://github.com/tomas-charvat/Dukascopy_downloader.git@6dc1b07e697e86477721e8d99fcb824fb01d42ab"
           python - <<'PY'
-          import lzma,struct
-          p=open('/tmp/day.bi5','rb').read()
-          d=lzma.decompress(p)
-          print("compressed",len(p),"decoded",len(d),"records",len(d)//24,"rem",len(d)%24)
-          print(struct.Struct(">IIIIIf").unpack_from(d,0))
+          import dukascopy_downloader as d
+          print("dukascopy_downloader_version", d.__version__)
+          assert d.__version__ == "1.1.0"
           PY
-      - name: Old direct-feed dukascopy-node smoke
+
+      - name: Jetta one-day USA500 M1 BID smoke
         shell: bash
-        continue-on-error: true
         run: |
           set -euxo pipefail
-          mkdir -p /tmp/oldcli
-          npx -y dukascopy-node@1.46.4 -i usa500idxusd -from 2019-01-03 -to 2019-01-04 -t m1 -f csv -p bid -dir /tmp/oldcli -fn one_day -v
-          find /tmp/oldcli -type f -maxdepth 2 -ls
+          rm -rf /tmp/v781-smoke
+          duka download USA500IDXUSD \
+            --tf m1 \
+            --from 2019-01-03 \
+            --to 2019-01-03 \
+            --side BID \
+            --data-dir /tmp/v781-smoke \
+            --rate 2 \
+            --force
+          duka status --data-dir /tmp/v781-smoke
+          duka export USA500IDXUSD \
+            --tf m1 \
+            --from 2019-01-03 \
+            --to 2019-01-03 \
+            --side BID \
+            --data-dir /tmp/v781-smoke \
+            -o /tmp/USA500_2019-01-03_M1_BID.csv
+          test -s /tmp/USA500_2019-01-03_M1_BID.csv
+          sha256sum /tmp/USA500_2019-01-03_M1_BID.csv
+          python - <<'PY'
+          import csv
+          p="/tmp/USA500_2019-01-03_M1_BID.csv"
+          with open(p,newline="",encoding="utf-8-sig") as f:
+              rows=list(csv.DictReader(f))
+          print("rows",len(rows),"first",rows[0] if rows else None,"last",rows[-1] if rows else None)
+          assert len(rows) > 100
+          PY
