@@ -49,61 +49,93 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Acquire pinned legacy direct-feed M1 BID CSV
+      - name: Acquire 12 pinned monthly direct-feed M1 BID CSVs
         shell: bash
         run: |
           set -euo pipefail
           OUT="out/${{ matrix.market }}/${{ matrix.year }}"
-          mkdir -p "$OUT"
-          NEXT=$((${{ matrix.year }} + 1))
-          npx -y dukascopy-node@1.46.4             -i "${{ matrix.instrument }}"             -from "${{ matrix.year }}-01-01"             -to "${NEXT}-01-01"             -t m1             -f csv             -p bid             -dir "$OUT"             -fn "${{ matrix.market }}_${{ matrix.year }}_M1_BID_VENDOR"             -v
+          mkdir -p "$OUT/monthly"
+          for M in $(seq -w 1 12); do
+            START="${{ matrix.year }}-${M}-01"
+            if [ "$M" = "12" ]; then
+              END="$((${{ matrix.year }}+1))-01-01"
+            else
+              NM=$(printf "%02d" $((10#$M + 1)))
+              END="${{ matrix.year }}-${NM}-01"
+            fi
+            NAME="${{ matrix.market }}_${{ matrix.year }}_${M}_M1_BID_VENDOR"
+            for ATT in 1 2 3 4; do
+              if npx -y dukascopy-node@1.46.4                 -i "${{ matrix.instrument }}" -from "$START" -to "$END"                 -t m1 -f csv -p bid -dir "$OUT/monthly" -fn "$NAME" -v; then
+                break
+              fi
+              test "$ATT" -lt 4
+              sleep $((ATT*3))
+            done
+            test -s "$OUT/monthly/$NAME.csv"
+            sha256sum "$OUT/monthly/$NAME.csv" > "$OUT/monthly/$NAME.csv.sha256"
+          done
 
-      - name: Audit untouched vendor CSV and freeze hash
+      - name: Merge monthly source files without altering rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="out/${{ matrix.market }}/${{ matrix.year }}"
+          MERGED="$OUT/${{ matrix.market }}_${{ matrix.year }}_M1_BID_VENDOR.csv"
+          FIRST=1
+          : > "$MERGED"
+          for F in "$OUT"/monthly/*.csv; do
+            if [ "$FIRST" = "1" ]; then
+              cat "$F" >> "$MERGED"; FIRST=0
+            else
+              tail -n +2 "$F" >> "$MERGED"
+            fi
+          done
+
+      - name: Audit untouched monthly sources and merged tape
         shell: bash
         run: |
           set -euo pipefail
           OUT="out/${{ matrix.market }}/${{ matrix.year }}"
           FILE="$OUT/${{ matrix.market }}_${{ matrix.year }}_M1_BID_VENDOR.csv"
-          test -s "$FILE"
           python - "$FILE" "${{ matrix.market }}" "${{ matrix.instrument }}" "${{ matrix.year }}" <<'PY'
-          import csv, hashlib, json, sys
+          import csv,glob,hashlib,json,os,sys
           p, market, instrument, year = sys.argv[1:]
-          h=hashlib.sha256()
-          with open(p,'rb') as f:
-              for b in iter(lambda:f.read(1024*1024),b''): h.update(b)
-          rows=0; bad=0; dup=0; nonmono=0; first=None; last=None; prev=None
+          def H(path):
+              h=hashlib.sha256()
+              with open(path,'rb') as f:
+                  for b in iter(lambda:f.read(1024*1024),b''):h.update(b)
+              return h.hexdigest()
+          months=[]
+          for x in sorted(glob.glob(os.path.join(os.path.dirname(p),'monthly','*.csv'))):
+              months.append({'file':os.path.basename(x),'bytes':os.path.getsize(x),'sha256':H(x)})
+          rows=bad=dup=nonmono=0;first=last=prev=None;header=None
           with open(p,newline='',encoding='utf-8-sig') as f:
-              r=csv.DictReader(f)
-              fields=[(x or '').lower() for x in (r.fieldnames or [])]
+              r=csv.DictReader(f); header=r.fieldnames
               for row in r:
                   v={str(k).lower():val for k,val in row.items()}
                   ts=v.get('timestamp') or v.get('time') or v.get('date')
                   try:
-                      o=float(v['open']); hi=float(v['high']); lo=float(v['low']); c=float(v['close'])
+                      o=float(v['open']);hi=float(v['high']);lo=float(v['low']);c=float(v['close'])
                       bad += int(min(o,hi,lo,c)<=0 or hi<max(o,c) or lo>min(o,c))
-                  except Exception:
-                      bad += 1
-                  rows += 1
-                  first = ts if first is None else first
-                  last = ts
+                  except Exception:bad+=1
+                  rows+=1;first=ts if first is None else first;last=ts
                   if prev is not None:
-                      dup += int(ts==prev)
-                      nonmono += int(ts<prev)
+                      dup += int(ts==prev);nonmono += int(ts<prev)
                   prev=ts
           audit={
-            'contract':'V781_VALIDATION_A_VENDOR_M1_BID_V1',
+            'contract':'V781_VALIDATION_A_VENDOR_M1_BID_MONTHLY_V1',
             'transport':'dukascopy-node@1.46.4 legacy direct-feed',
             'market':market,'instrument':instrument,'year':int(year),
-            'price_side':'bid','timeframe':'m1',
-            'rows':rows,'first':first,'last':last,
+            'price_side':'bid','timeframe':'m1','monthly_parts':months,
+            'merged_header':header,'rows':rows,'first':first,'last':last,
             'bad_ohlc_rows':bad,'duplicate_timestamps':dup,'nonmonotone_timestamps':nonmono,
-            'vendor_csv_sha256':h.hexdigest(),
-            'missing_minutes_policy':'never fabricated; vendor output retained exactly'
+            'merged_sha256':H(p),
+            'missing_minutes_policy':'never fabricated; monthly vendor CSV rows retained exactly'
           }
-          with open(f"{p}.AUDIT.json","w") as f: json.dump(audit,f,indent=2,sort_keys=True)
-          with open(f"{p}.sha256","w") as f: f.write(f"{h.hexdigest()}  {p.split('/')[-1]}\n")
-          print(json.dumps(audit,sort_keys=True))
-          if rows < 1000 or bad or dup or nonmono: raise SystemExit(2)
+          with open(p+'.AUDIT.json','w') as f:json.dump(audit,f,indent=2,sort_keys=True)
+          with open(p+'.sha256','w') as f:f.write(f"{audit['merged_sha256']}  {os.path.basename(p)}\n")
+          print(json.dumps({k:v for k,v in audit.items() if k!='monthly_parts'},sort_keys=True))
+          if len(months)!=12 or rows<1000 or bad or dup or nonmono:raise SystemExit(2)
           PY
 
       - uses: actions/upload-artifact@v4
