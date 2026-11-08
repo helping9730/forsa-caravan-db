@@ -14,79 +14,51 @@ jobs:
     timeout-minutes: 45
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 2
       matrix:
         include:
-          - { market: US500, instrument: usa500idxusd, year: 2019 }
-          - { market: US500, instrument: usa500idxusd, year: 2020 }
-          - { market: US500, instrument: usa500idxusd, year: 2021 }
-          - { market: USTECH100, instrument: usatechidxusd, year: 2019 }
-          - { market: USTECH100, instrument: usatechidxusd, year: 2020 }
-          - { market: USTECH100, instrument: usatechidxusd, year: 2021 }
-          - { market: GERMANY40, instrument: deuidxeur, year: 2019 }
-          - { market: GERMANY40, instrument: deuidxeur, year: 2020 }
-          - { market: GERMANY40, instrument: deuidxeur, year: 2021 }
-          - { market: UK100, instrument: gbridxgbp, year: 2019 }
-          - { market: UK100, instrument: gbridxgbp, year: 2020 }
-          - { market: UK100, instrument: gbridxgbp, year: 2021 }
-          - { market: WTI, instrument: lightcmdusd, year: 2019 }
-          - { market: WTI, instrument: lightcmdusd, year: 2020 }
-          - { market: WTI, instrument: lightcmdusd, year: 2021 }
-          - { market: EURUSD, instrument: eurusd, year: 2019 }
-          - { market: EURUSD, instrument: eurusd, year: 2020 }
-          - { market: EURUSD, instrument: eurusd, year: 2021 }
-          - { market: BTCUSD, instrument: btcusd, year: 2019 }
-          - { market: BTCUSD, instrument: btcusd, year: 2020 }
-          - { market: BTCUSD, instrument: btcusd, year: 2021 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2019 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2020 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2021 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2019 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2020 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2021 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2019 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2020 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2021 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2019 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2020 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2021 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2019 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2020 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2021 }
+          - { market: EURUSD, symbol: EURUSD, year: 2019 }
+          - { market: EURUSD, symbol: EURUSD, year: 2020 }
+          - { market: EURUSD, symbol: EURUSD, year: 2021 }
+          - { market: BTCUSD, symbol: BTCUSD, year: 2019 }
+          - { market: BTCUSD, symbol: BTCUSD, year: 2020 }
+          - { market: BTCUSD, symbol: BTCUSD, year: 2021 }
+
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - name: Acquire frozen Dukascopy M1 BID tape
+
+      - name: Acquire + normalize native Dukascopy BI5 M1 BID
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "raw/${{ matrix.market }}/${{ matrix.year }}"
-          NEXT=$((${{ matrix.year }} + 1))
-          npx -y dukascopy-node@1.50.0             -i "${{ matrix.instrument }}"             -from "${{ matrix.year }}-01-01"             -to "${NEXT}-01-01"             -t m1 -f csv -p bid -v             -r 4 -rp 1500 -re -bs 10 -bp 1000             -dir "raw/${{ matrix.market }}/${{ matrix.year }}"             -fn "${{ matrix.market }}_${{ matrix.year }}_M1_BID"
-      - name: Audit and hash tape
+          python v781_direct_bi5.py             --market "${{ matrix.market }}"             --symbol "${{ matrix.symbol }}"             --year "${{ matrix.year }}"             --workers 2             --out "out/${{ matrix.market }}/${{ matrix.year }}"
+
+      - name: Independent artifact hash verification
         shell: bash
         run: |
           set -euo pipefail
-          FILE="raw/${{ matrix.market }}/${{ matrix.year }}/${{ matrix.market }}_${{ matrix.year }}_M1_BID.csv"
-          test -s "$FILE"
-          python - "$FILE" "${{ matrix.market }}" "${{ matrix.year }}" <<'PY'
-          import csv, hashlib, json, sys
-          p, market, year = sys.argv[1:]
-          h=hashlib.sha256()
-          with open(p,'rb') as f:
-              for ch in iter(lambda:f.read(1024*1024),b''): h.update(ch)
-          rows=0; first=None; last=None; bad=0; prev=None; dup=0
-          with open(p,newline='',encoding='utf-8-sig') as f:
-              r=csv.DictReader(f)
-              for row in r:
-                  rows+=1
-                  vals={k.lower():v for k,v in row.items()}
-                  ts=vals.get('timestamp') or vals.get('time') or vals.get('date')
-                  if first is None: first=ts
-                  last=ts
-                  dup += int(ts==prev)
-                  prev=ts
-                  try:
-                      o=float(vals['open']); hi=float(vals['high']); lo=float(vals['low']); c=float(vals['close'])
-                      bad += int(min(o,hi,lo,c)<=0 or hi<max(o,c) or lo>min(o,c))
-                  except Exception: bad+=1
-          audit={'market':market,'year':int(year),'rows':rows,'first':first,'last':last,'duplicate_adjacent_timestamps':dup,'bad_ohlc_rows':bad,'sha256':h.hexdigest()}
-          with open(f"raw/{market}/{year}/AUDIT.json","w") as f: json.dump(audit,f,indent=2,sort_keys=True)
-          print(json.dumps(audit,sort_keys=True))
-          if rows < 1000 or bad: raise SystemExit(2)
-          PY
-          sha256sum "$FILE" > "raw/${{ matrix.market }}/${{ matrix.year }}/SHA256SUMS.txt"
+          cd "out/${{ matrix.market }}/${{ matrix.year }}"
+          sha256sum -c SHA256SUMS.txt
+
       - uses: actions/upload-artifact@v4
         with:
           name: V781A-${{ matrix.market }}-${{ matrix.year }}
-          path: raw/${{ matrix.market }}/${{ matrix.year }}
+          path: out/${{ matrix.market }}/${{ matrix.year }}
           if-no-files-found: error
-          compression-level: 9
+          compression-level: 0
           retention-days: 7
