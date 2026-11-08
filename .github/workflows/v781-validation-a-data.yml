@@ -4,9 +4,6 @@ on:
   pull_request:
     branches: [main]
 
-concurrency:
-  group: v781-validation-a-raw-m1
-  cancel-in-progress: true
 
 permissions:
   contents: read
