@@ -3,3 +3,5 @@ V781 Validation A monthly immutable vendor-source trigger. 2019-2021 only. No st
 Jetta transport smoke trigger.
 
 Raw-preserving Jetta Validation-A acquisition trigger.
+
+Four-timeout-year clean retry under 60-minute transport ceiling.
