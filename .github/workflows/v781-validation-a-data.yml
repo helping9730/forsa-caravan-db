@@ -4,6 +4,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: v781-validation-a-raw-m1
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -11,54 +15,101 @@ jobs:
   acquire:
     name: ${{ matrix.market }}-${{ matrix.year }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
     strategy:
       fail-fast: false
-      max-parallel: 2
+      max-parallel: 4
       matrix:
         include:
-          - { market: US500, symbol: USA500IDXUSD, year: 2019 }
-          - { market: US500, symbol: USA500IDXUSD, year: 2020 }
-          - { market: US500, symbol: USA500IDXUSD, year: 2021 }
-          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2019 }
-          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2020 }
-          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2021 }
-          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2019 }
-          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2020 }
-          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2021 }
-          - { market: UK100, symbol: GBRIDXGBP, year: 2019 }
-          - { market: UK100, symbol: GBRIDXGBP, year: 2020 }
-          - { market: UK100, symbol: GBRIDXGBP, year: 2021 }
-          - { market: WTI, symbol: LIGHTCMDUSD, year: 2019 }
-          - { market: WTI, symbol: LIGHTCMDUSD, year: 2020 }
-          - { market: WTI, symbol: LIGHTCMDUSD, year: 2021 }
-          - { market: EURUSD, symbol: EURUSD, year: 2019 }
-          - { market: EURUSD, symbol: EURUSD, year: 2020 }
-          - { market: EURUSD, symbol: EURUSD, year: 2021 }
-          - { market: BTCUSD, symbol: BTCUSD, year: 2019 }
-          - { market: BTCUSD, symbol: BTCUSD, year: 2020 }
-          - { market: BTCUSD, symbol: BTCUSD, year: 2021 }
+          - { market: US500, instrument: usa500idxusd, year: 2019 }
+          - { market: US500, instrument: usa500idxusd, year: 2020 }
+          - { market: US500, instrument: usa500idxusd, year: 2021 }
+          - { market: USTECH100, instrument: usatechidxusd, year: 2019 }
+          - { market: USTECH100, instrument: usatechidxusd, year: 2020 }
+          - { market: USTECH100, instrument: usatechidxusd, year: 2021 }
+          - { market: GERMANY40, instrument: deuidxeur, year: 2019 }
+          - { market: GERMANY40, instrument: deuidxeur, year: 2020 }
+          - { market: GERMANY40, instrument: deuidxeur, year: 2021 }
+          - { market: UK100, instrument: gbridxgbp, year: 2019 }
+          - { market: UK100, instrument: gbridxgbp, year: 2020 }
+          - { market: UK100, instrument: gbridxgbp, year: 2021 }
+          - { market: WTI, instrument: lightcmdusd, year: 2019 }
+          - { market: WTI, instrument: lightcmdusd, year: 2020 }
+          - { market: WTI, instrument: lightcmdusd, year: 2021 }
+          - { market: EURUSD, instrument: eurusd, year: 2019 }
+          - { market: EURUSD, instrument: eurusd, year: 2020 }
+          - { market: EURUSD, instrument: eurusd, year: 2021 }
+          - { market: BTCUSD, instrument: btcusd, year: 2019 }
+          - { market: BTCUSD, instrument: btcusd, year: 2020 }
+          - { market: BTCUSD, instrument: btcusd, year: 2021 }
 
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
-      - name: Acquire + normalize native Dukascopy BI5 M1 BID
+      - name: Acquire pinned legacy direct-feed M1 BID CSV
         shell: bash
         run: |
           set -euo pipefail
-          python v781_direct_bi5.py             --market "${{ matrix.market }}"             --symbol "${{ matrix.symbol }}"             --year "${{ matrix.year }}"             --workers 2             --out "out/${{ matrix.market }}/${{ matrix.year }}"
+          OUT="out/${{ matrix.market }}/${{ matrix.year }}"
+          mkdir -p "$OUT"
+          NEXT=$((${{ matrix.year }} + 1))
+          npx -y dukascopy-node@1.46.4             -i "${{ matrix.instrument }}"             -from "${{ matrix.year }}-01-01"             -to "${NEXT}-01-01"             -t m1             -f csv             -p bid             -dir "$OUT"             -fn "${{ matrix.market }}_${{ matrix.year }}_M1_BID_VENDOR"             -v
 
-      - name: Independent artifact hash verification
+      - name: Audit untouched vendor CSV and freeze hash
         shell: bash
         run: |
           set -euo pipefail
-          cd "out/${{ matrix.market }}/${{ matrix.year }}"
-          sha256sum -c SHA256SUMS.txt
+          OUT="out/${{ matrix.market }}/${{ matrix.year }}"
+          FILE="$OUT/${{ matrix.market }}_${{ matrix.year }}_M1_BID_VENDOR.csv"
+          test -s "$FILE"
+          python - "$FILE" "${{ matrix.market }}" "${{ matrix.instrument }}" "${{ matrix.year }}" <<'PY'
+          import csv, hashlib, json, sys
+          p, market, instrument, year = sys.argv[1:]
+          h=hashlib.sha256()
+          with open(p,'rb') as f:
+              for b in iter(lambda:f.read(1024*1024),b''): h.update(b)
+          rows=0; bad=0; dup=0; nonmono=0; first=None; last=None; prev=None
+          with open(p,newline='',encoding='utf-8-sig') as f:
+              r=csv.DictReader(f)
+              fields=[(x or '').lower() for x in (r.fieldnames or [])]
+              for row in r:
+                  v={str(k).lower():val for k,val in row.items()}
+                  ts=v.get('timestamp') or v.get('time') or v.get('date')
+                  try:
+                      o=float(v['open']); hi=float(v['high']); lo=float(v['low']); c=float(v['close'])
+                      bad += int(min(o,hi,lo,c)<=0 or hi<max(o,c) or lo>min(o,c))
+                  except Exception:
+                      bad += 1
+                  rows += 1
+                  first = ts if first is None else first
+                  last = ts
+                  if prev is not None:
+                      dup += int(ts==prev)
+                      nonmono += int(ts<prev)
+                  prev=ts
+          audit={
+            'contract':'V781_VALIDATION_A_VENDOR_M1_BID_V1',
+            'transport':'dukascopy-node@1.46.4 legacy direct-feed',
+            'market':market,'instrument':instrument,'year':int(year),
+            'price_side':'bid','timeframe':'m1',
+            'rows':rows,'first':first,'last':last,
+            'bad_ohlc_rows':bad,'duplicate_timestamps':dup,'nonmonotone_timestamps':nonmono,
+            'vendor_csv_sha256':h.hexdigest(),
+            'missing_minutes_policy':'never fabricated; vendor output retained exactly'
+          }
+          with open(f"{p}.AUDIT.json","w") as f: json.dump(audit,f,indent=2,sort_keys=True)
+          with open(f"{p}.sha256","w") as f: f.write(f"{h.hexdigest()}  {p.split('/')[-1]}\n")
+          print(json.dumps(audit,sort_keys=True))
+          if rows < 1000 or bad or dup or nonmono: raise SystemExit(2)
+          PY
 
       - uses: actions/upload-artifact@v4
         with:
           name: V781A-${{ matrix.market }}-${{ matrix.year }}
           path: out/${{ matrix.market }}/${{ matrix.year }}
           if-no-files-found: error
-          compression-level: 0
+          compression-level: 9
           retention-days: 7
