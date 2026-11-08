@@ -1,0 +1,67 @@
+name: V781 Validation A Missing Raw M1 Acquisition
+
+on:
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: v781-validation-a-missing-raw-m1
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  acquire:
+    name: ${{ matrix.market }}-${{ matrix.year }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2019 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2021 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2019 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2021 }
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Jetta dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check             "git+https://github.com/tomas-charvat/Dukascopy_downloader.git@6dc1b07e697e86477721e8d99fcb824fb01d42ab"
+          python - <<'PY'
+          import dukascopy_downloader as d
+          assert d.__version__ == "1.1.0", d.__version__
+          PY
+      - name: Acquire and audit raw vendor responses
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="out/${{ matrix.market }}/${{ matrix.year }}"
+          python v781_jetta_m1.py             --market "${{ matrix.market }}"             --symbol "${{ matrix.symbol }}"             --year "${{ matrix.year }}"             --rate 1.5             --out "$OUT"
+          {
+            python --version
+            python -m pip freeze
+          } > "$OUT/ENVIRONMENT.txt"
+          sha256sum v781_jetta_m1.py > "$OUT/ACQUISITION_CODE_SHA256.txt"
+      - name: Verify final hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "out/${{ matrix.market }}/${{ matrix.year }}"
+          sha256sum -c SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: V781A-MISSING-${{ matrix.market }}-${{ matrix.year }}
+          path: out/${{ matrix.market }}/${{ matrix.year }}
+          if-no-files-found: warn
+          compression-level: 9
+          retention-days: 14
