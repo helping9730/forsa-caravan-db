@@ -5,3 +5,5 @@ Jetta transport smoke trigger.
 Raw-preserving Jetta Validation-A acquisition trigger.
 
 Four-timeout-year clean retry under 60-minute transport ceiling.
+
+Concurrency-disabled authoritative four-year retry.
