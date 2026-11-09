@@ -1,0 +1,71 @@
+name: V787 Burned Stress 2018 2022 Raw M1 Acquisition
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  acquire:
+    name: ${{ matrix.market }}-${{ matrix.year }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - { market: US500, symbol: USA500IDXUSD, year: 2018 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2022 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2018 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2022 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2018 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2022 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2018 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2022 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2018 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2022 }
+          - { market: EURUSD, symbol: EURUSD, year: 2018 }
+          - { market: EURUSD, symbol: EURUSD, year: 2022 }
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Jetta dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check             "git+https://github.com/tomas-charvat/Dukascopy_downloader.git@6dc1b07e697e86477721e8d99fcb824fb01d42ab"
+          python - <<'PY'
+          import dukascopy_downloader as d
+          assert d.__version__ == "1.1.0", d.__version__
+          PY
+      - name: Acquire frozen burned-stress raw vendor responses
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="out/${{ matrix.market }}/${{ matrix.year }}"
+          python v787_stress_jetta_m1.py             --market "${{ matrix.market }}"             --symbol "${{ matrix.symbol }}"             --year "${{ matrix.year }}"             --rate 1.5             --out "$OUT"
+          {
+            python --version
+            python -m pip freeze
+          } > "$OUT/ENVIRONMENT.txt"
+          sha256sum v787_stress_jetta_m1.py > "$OUT/ACQUISITION_CODE_SHA256.txt"
+      - name: Verify hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "out/${{ matrix.market }}/${{ matrix.year }}"
+          sha256sum -c SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: V787S-${{ matrix.market }}-${{ matrix.year }}
+          path: out/${{ matrix.market }}/${{ matrix.year }}
+          if-no-files-found: error
+          compression-level: 9
+          retention-days: 14
