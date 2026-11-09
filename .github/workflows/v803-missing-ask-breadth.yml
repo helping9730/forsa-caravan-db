@@ -1,7 +1,8 @@
 name: V803 Missing ASK Breadth Acquisition
 on:
   push:
-    branches: [v803-ask-missing-20261110]
+    branches: [main]
+    paths: [V803_ASK_MAIN_TRIGGER.md]
 permissions:
   contents: read
 jobs:
