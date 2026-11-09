@@ -190,8 +190,8 @@ def main():
     ap.add_argument("--rate", type=float, default=2.0)
     args = ap.parse_args()
 
-    if args.year not in (2019, 2020, 2021):
-        raise SystemExit("LOCKBOX REFUSED: this acquisition build is Validation A only (2019-2021)")
+    if args.year not in (2023, 2024):
+        raise SystemExit("LOCKBOX REFUSED: this acquisition build is Validation B only (2023-2024); 2025 remains sealed")
 
     import dukascopy_downloader as duka
     if duka.__version__ != EXPECTED_DOWNLOADER_VERSION:
