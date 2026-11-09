@@ -146,7 +146,7 @@ def main():
                     w.writerow([ts.isoformat().replace("+00:00","Z"),f"{o:.{dec}f}",f"{h:.{dec}f}",f"{l:.{dec}f}",f"{c:.{dec}f}",format(v,".15g")])
     mp=root/"RAW_HTTP_MANIFEST.json"; mp.write_bytes(canonical(manifest))
     audit={
-      "contract":CONTRACT,"validation_block":"C_2015W_2016_2017","validation_role":("WARMUP_ONLY" if a.year==2015 else "EVALUATION"),"v785_prevalidation_freeze_sha256":V787_PRESTRESS_FREEZE_SHA256,
+      "contract":CONTRACT,"stress_block":"BURNED_2018_2022","evidence_role":"BURNED_STRESS_ONLY","v787_prestress_freeze_sha256":V787_PRESTRESS_FREEZE_SHA256,
       "market":a.market,"requested_symbol":a.symbol,"resolved_dukascopy_code":code,"year":a.year,
       "source_base_url":BASE_URL,"source_transport":"Dukascopy Jetta JSON API","price_side":"BID","timeframe":"M1","timezone":"UTC",
       "dependency_repo":"tomas-charvat/Dukascopy_downloader","dependency_commit":PINNED_DOWNLOADER_COMMIT,"dependency_version":EXPECTED_DOWNLOADER_VERSION,
