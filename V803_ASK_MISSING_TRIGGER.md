@@ -5,3 +5,5 @@ Data-only trigger. No alpha, threshold, hold, context, or sizing changes. Uses t
 Second synchronize push after workflow is present on branch.
 
 PR synchronize trigger for native ASK acquisition.
+
+WTI/EURUSD-only narrowed workflow synchronize trigger.
