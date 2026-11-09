@@ -1,0 +1,38 @@
+name: V790 Post-Design Tail Raw Acquisition
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  acquire:
+    name: ${{ matrix.market }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        include:
+          - {market: US500, symbol: USA500IDXUSD}
+          - {market: USTECH100, symbol: USATECHIDXUSD}
+          - {market: GERMANY40, symbol: DEUIDXEUR}
+          - {market: UK100, symbol: GBRIDXGBP}
+          - {market: WTI, symbol: LIGHTCMDUSD}
+          - {market: EURUSD, symbol: EURUSD}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: '3.12'}
+      - name: Install pinned source decoder
+        run: python -m pip install --disable-pip-version-check "git+https://github.com/tomas-charvat/Dukascopy_downloader.git@6dc1b07e697e86477721e8d99fcb824fb01d42ab"
+      - name: Acquire sealed-candidate tail
+        run: |
+          python v790_tail_jetta_m1.py --market "${{ matrix.market }}" --symbol "${{ matrix.symbol }}" --out "out/${{ matrix.market }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: V790TAIL-${{ matrix.market }}
+          path: out/${{ matrix.market }}
+          if-no-files-found: error
+          compression-level: 9
+          retention-days: 14
