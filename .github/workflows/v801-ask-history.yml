@@ -1,0 +1,115 @@
+name: V801 Burned ASK M1 Acquisition
+on:
+  push:
+    branches: [v801-ask-history-2015-2025]
+permissions:
+  contents: read
+jobs:
+  acquire:
+    name: ${{ matrix.market }}-${{ matrix.year }}-ASK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix:
+        include:
+          - { market: US500, symbol: USA500IDXUSD, year: 2015 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2016 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2017 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2018 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2019 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2020 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2021 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2022 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2023 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2024 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2025 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2015 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2016 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2017 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2018 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2019 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2020 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2021 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2022 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2023 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2024 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2025 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2015 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2016 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2017 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2018 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2019 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2020 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2021 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2022 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2023 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2024 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2025 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2015 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2016 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2017 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2018 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2019 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2020 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2021 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2022 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2023 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2024 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2025 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2015 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2016 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2017 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2018 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2019 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2020 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2021 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2022 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2023 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2024 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2025 }
+          - { market: EURUSD, symbol: EURUSD, year: 2015 }
+          - { market: EURUSD, symbol: EURUSD, year: 2016 }
+          - { market: EURUSD, symbol: EURUSD, year: 2017 }
+          - { market: EURUSD, symbol: EURUSD, year: 2018 }
+          - { market: EURUSD, symbol: EURUSD, year: 2019 }
+          - { market: EURUSD, symbol: EURUSD, year: 2020 }
+          - { market: EURUSD, symbol: EURUSD, year: 2021 }
+          - { market: EURUSD, symbol: EURUSD, year: 2022 }
+          - { market: EURUSD, symbol: EURUSD, year: 2023 }
+          - { market: EURUSD, symbol: EURUSD, year: 2024 }
+          - { market: EURUSD, symbol: EURUSD, year: 2025 }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Jetta dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check "git+https://github.com/tomas-charvat/Dukascopy_downloader.git@6dc1b07e697e86477721e8d99fcb824fb01d42ab"
+      - name: Acquire ASK source
+        shell: bash
+        run: |
+          set -euo pipefail
+          OUT="out/${{ matrix.market }}/${{ matrix.year }}"
+          python v801_ask_jetta_m1.py --market "${{ matrix.market }}" --symbol "${{ matrix.symbol }}" --year "${{ matrix.year }}" --rate 1.5 --out "$OUT"
+          python --version > "$OUT/ENVIRONMENT.txt"
+          python -m pip freeze >> "$OUT/ENVIRONMENT.txt"
+          sha256sum v801_ask_jetta_m1.py > "$OUT/ACQUISITION_CODE_SHA256.txt"
+      - name: Verify hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "out/${{ matrix.market }}/${{ matrix.year }}"
+          sha256sum -c SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: V801ASK-${{ matrix.market }}-${{ matrix.year }}
+          path: out/${{ matrix.market }}/${{ matrix.year }}
+          if-no-files-found: error
+          compression-level: 9
+          retention-days: 14
