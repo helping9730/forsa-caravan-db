@@ -1,0 +1,53 @@
+name: V791 2014 Untouched Transfer Acquisition
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - { market: US500, symbol: USA500IDXUSD }
+          - { market: USTECH100, symbol: USATECHIDXUSD }
+          - { market: GERMANY40, symbol: DEUIDXEUR }
+          - { market: UK100, symbol: GBRIDXGBP }
+          - { market: WTI, symbol: LIGHTCMDUSD }
+          - { market: EURUSD, symbol: EURUSD }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned source decoder
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check "git+https://github.com/tomas-charvat/Dukascopy_downloader.git@6dc1b07e697e86477721e8d99fcb824fb01d42ab"
+      - name: Acquire untouched 2014 raw M1
+        run: |
+          set -euo pipefail
+          OUT="out/${{ matrix.market }}/2014"
+          python v791_2014_jetta_m1.py --market "${{ matrix.market }}" --symbol "${{ matrix.symbol }}" --year 2014 --rate 1.5 --out "$OUT"
+          python --version > "$OUT/ENVIRONMENT.txt"
+          python -m pip freeze >> "$OUT/ENVIRONMENT.txt"
+          sha256sum v791_2014_jetta_m1.py > "$OUT/ACQUISITION_CODE_SHA256.txt"
+      - name: Verify
+        run: |
+          cd "out/${{ matrix.market }}/2014"
+          sha256sum -c SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: V791-2014-${{ matrix.market }}
+          path: out/${{ matrix.market }}/2014
+          if-no-files-found: error
+          compression-level: 9
+          retention-days: 14
