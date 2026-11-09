@@ -1,0 +1,89 @@
+name: V802 Native ASK Burned Spread Panel
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'V802_NATIVE_SPREAD_TRIGGER.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: v802-native-ask-panel
+  cancel-in-progress: false
+
+jobs:
+  acquire:
+    name: ${{ matrix.market }}-${{ matrix.year }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        include:
+          - { market: US500, symbol: USA500IDXUSD, year: 2018 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2018 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2018 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2018 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2018 }
+          - { market: EURUSD, symbol: EURUSD, year: 2018 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2020 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2020 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2020 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2020 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2020 }
+          - { market: EURUSD, symbol: EURUSD, year: 2020 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2022 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2022 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2022 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2022 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2022 }
+          - { market: EURUSD, symbol: EURUSD, year: 2022 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2024 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2024 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2024 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2024 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2024 }
+          - { market: EURUSD, symbol: EURUSD, year: 2024 }
+          - { market: US500, symbol: USA500IDXUSD, year: 2025 }
+          - { market: USTECH100, symbol: USATECHIDXUSD, year: 2025 }
+          - { market: GERMANY40, symbol: DEUIDXEUR, year: 2025 }
+          - { market: UK100, symbol: GBRIDXGBP, year: 2025 }
+          - { market: WTI, symbol: LIGHTCMDUSD, year: 2025 }
+          - { market: EURUSD, symbol: EURUSD, year: 2025 }
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Jetta dependency
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check \
+            "git+https://github.com/tomas-charvat/Dukascopy_downloader.git@6dc1b07e697e86477721e8d99fcb824fb01d42ab"
+      - name: Acquire native ASK M1
+        run: |
+          set -euo pipefail
+          OUT="out/${{ matrix.market }}/${{ matrix.year }}"
+          python v802_ask_panel.py \
+            --market "${{ matrix.market }}" \
+            --symbol "${{ matrix.symbol }}" \
+            --year "${{ matrix.year }}" \
+            --rate 1.5 --out "$OUT"
+          python -m pip freeze > "$OUT/ENVIRONMENT.txt"
+          sha256sum v802_ask_panel.py > "$OUT/ACQUISITION_CODE_SHA256.txt"
+      - name: Verify hashes
+        run: |
+          cd "out/${{ matrix.market }}/${{ matrix.year }}"
+          sha256sum -c SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: V802ASK-${{ matrix.market }}-${{ matrix.year }}
+          path: out/${{ matrix.market }}/${{ matrix.year }}
+          if-no-files-found: error
+          compression-level: 9
+          retention-days: 14
