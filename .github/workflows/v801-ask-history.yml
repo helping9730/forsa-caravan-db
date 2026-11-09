@@ -2,8 +2,6 @@ name: V801 Burned ASK M1 Acquisition
 on:
   pull_request:
     branches: [main]
-    paths:
-      - V801_ASK_ACQUISITION_TRIGGER.md
 permissions:
   contents: read
 jobs:
