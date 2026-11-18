@@ -1,0 +1,22 @@
+name: Dukascopy public tick quote probe
+on:
+  push:
+    branches:
+      - research/dukascopy-peak-ticks-20261118
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe Dukascopy 2026 hourly native tick availability
+        run: python3 research/dukas_tick_probe.py
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dukas-native-ticks-probe
+          path: probe_native_ticks/
+          retention-days: 7
+          if-no-files-found: error
