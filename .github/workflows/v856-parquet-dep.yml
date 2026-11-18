@@ -1,0 +1,23 @@
+name: V856 reproducible Parquet decoder dependency
+on:
+  push:
+    branches:
+      - research/v856-dukascopy-20261118
+permissions:
+  contents: read
+jobs:
+  wheel:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 8
+    steps:
+      - name: Download official CPython 3.13 Linux Parquet reader wheel
+        run: |
+          python3 -m pip download pyarrow==25.0.1 --only-binary=:all: --no-deps --python-version 313 --implementation cp --abi cp313 --platform manylinux_2_28_x86_64 --dest wheel
+          sha256sum wheel/*.whl > wheel/SHA256SUMS.txt
+      - name: Preserve wheel with digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyarrow-cp313-manylinux-wheel
+          path: wheel/
+          retention-days: 7
+          if-no-files-found: error
