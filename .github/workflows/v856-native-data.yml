@@ -1,0 +1,23 @@
+name: V856 complete native forward Dukascopy capture (research)
+on:
+  push:
+    branches:
+      - research/v856-dukascopy-20261118
+permissions:
+  contents: read
+jobs:
+  collect:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download seven original markets BID ASK and preserve raw provider receipts
+        run: python3 research/v856_dukascopy_native_capture.py
+      - name: Save all native data, even if individual provider requests failed
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: v856-dukascopy-original-raw-nov11-17
+          path: v856_provider_raw_20261118/
+          retention-days: 14
+          if-no-files-found: error
